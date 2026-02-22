@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>PREDIKSI ANGKA - Full</title>
+
+<script src="https://cdn.jsdelivr.net/npm/xlsx/dist/xlsx.full.min.js"></script>
+
+<style>
+body{
+    font-family: Arial, sans-serif;
+    background:#0f172a;
+    color:white;
+    margin:0;
+    padding:15px;
+}
+h1{
+    text-align:center;
+    color:#00ffc3;
+}
+.container{
+    max-width:700px;
+    margin:auto;
+}
+.card{
+    background:#1e293b;
+    padding:18px;
+    border-radius:12px;
+    margin-bottom:15px;
+    box-shadow:0 0 15px rgba(0,255,195,0.08);
+}
+button{
+    background:#00ffc3;
+    border:none;
+    padding:10px;
+    border-radius:8px;
+    font-weight:bold;
+    cursor:pointer;
+    margin-top:8px;
+    width:100%;
+}
+button:hover{
+    background:#00cfa0;
+}
+input{
+    width:100%;
+    padding:8px;
+    border-radius:6px;
+    border:none;
+    margin-top:6px;
+}
+.output{
+    white-space:pre-line;
+    background:#0b1220;
+    padding:12px;
+    border-radius:8px;
+    font-size:14px;
+}
+.highlight{
+    color:#00ffc3;
+    font-weight:bold;
+}
+</style>
+</head>
+
+<body>
+
+<h1>PREDIKSI ANGKA ACAK</h1>
+
+<div class="container">
+
+<div class="card">
+<h3>Import CSV / Excel</h3>
+<input type="file" id="fileInput" accept=".csv,.xlsx">
+<p>Total Data: <span class="highlight" id="totalData">0</span></p>
+<button onclick="generateTop()">Generate Ranking</button>
+</div>
+
+<div class="card">
+<h3>Input Result Baru</h3>
+<input type="text" id="newResult" maxlength="4" placeholder="Masukkan 4 digit">
+<button onclick="checkAccuracy()">Cek Akurasi</button>
+<button onclick="resetAccuracy()">Reset Akurasi</button>
+</div>
+
+<div class="card">
+<h3>Output</h3>
+<div class="output" id="output"></div>
+</div>
+
+</div>
+
+<script>
+
+let historyData=[];
+let top4D=[],top3D=[],top2D=[];
+let stats=JSON.parse(localStorage.getItem("accuracyStats"))||{
+total:0,hit4D:0,hit3D:0,hit2D:0};
+
+document.getElementById('fileInput').addEventListener('change',function(e){
+
+let file=e.target.files[0];
+let reader=new FileReader();
+
+if(file.name.endsWith(".csv")){
+    reader.onload=function(evt){
+        processData(evt.target.result.split(/\r?\n/));
+    };
+    reader.readAsText(file);
+}else{
+    reader.onload=function(evt){
+        let data=new Uint8Array(evt.target.result);
+        let workbook=XLSX.read(data,{type:'array'});
+        let sheet=workbook.Sheets[workbook.SheetNames[0]];
+        let json=XLSX.utils.sheet_to_json(sheet,{header:1});
+        processData(json.flat());
+    };
+    reader.readAsArrayBuffer(file);
+}
+
+});
+
+function processData(raw){
+historyData=raw
+.map(n=>String(n).trim())
+.filter(n=>/^\d{4}$/.test(n));
+
+localStorage.setItem("historyNumbers",JSON.stringify(historyData));
+document.getElementById("totalData").innerText=historyData.length;
+alert("Data berhasil diimport!");
+}
+
+function analyze(data){
+let digitFreq=Array(10).fill(0);
+let posFreq=Array.from({length:4},()=>Array(10).fill(0));
+
+data.forEach(num=>{
+for(let i=0;i<4;i++){
+let d=parseInt(num[i]);
+digitFreq[d]++;
+posFreq[i][d]++;
+}
+});
+
+return{digitFreq,posFreq,total:data.length};
+}
+
+function normalize(arr,total){
+return arr.map(x=>x/total);
+}
+
+function generateTop(){
+
+historyData=JSON.parse(localStorage.getItem("historyNumbers"))||[];
+if(historyData.length<30){
+alert("Minimal 30 data!");
+return;
+}
+
+let global=analyze(historyData);
+let rolling=analyze(historyData.slice(-30));
+
+let gDigit=normalize(global.digitFreq,global.total);
+let rDigit=normalize(rolling.digitFreq,rolling.total);
+let gPos=global.posFreq.map(p=>normalize(p,global.total));
+let rPos=rolling.posFreq.map(p=>normalize(p,rolling.total));
+
+let candidates=[];
+
+for(let i=0;i<10000;i++){
+let num=i.toString().padStart(4,'0');
+let score=0;
+
+for(let j=0;j<4;j++){
+let d=parseInt(num[j]);
+let digitScore=(0.7*gDigit[d]+0.3*rDigit[d]);
+let posScore=(0.7*gPos[j][d]+0.3*rPos[j][d]);
+score+=digitScore*0.4;
+score+=posScore*0.3;
+}
+
+candidates.push({num,score});
+}
+
+candidates.sort((a,b)=>b.score-a.score);
+
+top4D=candidates.slice(0,5).map(x=>x.num);
+
+let freq3D={},freq2D={};
+
+candidates.forEach(c=>{
+let d3=c.num.slice(1);
+let d2=c.num.slice(2);
+freq3D[d3]=(freq3D[d3]||0)+c.score;
+freq2D[d2]=(freq2D[d2]||0)+c.score;
+});
+
+top3D=Object.keys(freq3D)
+.sort((a,b)=>freq3D[b]-freq3D[a])
+.slice(0,5);
+
+top2D=Object.keys(freq2D)
+.sort((a,b)=>freq2D[b]-freq2D[a])
+.slice(0,10);
+
+let result="🏆 TOP 5 (4D)\n";
+top4D.forEach((n,i)=>result+=(i+1)+". "+n+"\n");
+
+result+="\n🎯 TOP 5 (3D)\n";
+top3D.forEach((n,i)=>result+=(i+1)+". "+n+"\n");
+
+result+="\n💎 TOP 10 (2D)\n";
+top2D.forEach((n,i)=>result+=(i+1)+". "+n+"\n");
+
+document.getElementById("output").innerText=result;
+}
+
+function checkAccuracy(){
+let result=document.getElementById("newResult").value.trim();
+if(!/^\d{4}$/.test(result)){
+alert("Masukkan 4 digit!");
+return;
+}
+
+stats.total++;
+
+if(top4D.includes(result))stats.hit4D++;
+if(top3D.includes(result.slice(1)))stats.hit3D++;
+if(top2D.includes(result.slice(2)))stats.hit2D++;
+
+localStorage.setItem("accuracyStats",JSON.stringify(stats));
+
+let report="\n📊 RESULT: "+result+"\n";
+report+="4D: "+(top4D.includes(result)?"✅":"❌")+"\n";
+report+="3D: "+(top3D.includes(result.slice(1))?"✅":"❌")+"\n";
+report+="2D: "+(top2D.includes(result.slice(2))?"✅":"❌")+"\n\n";
+
+report+="📈 AKURASI\n";
+report+="Total Test: "+stats.total+"\n";
+report+="4D: "+((stats.hit4D/stats.total)*100).toFixed(2)+"%\n";
+report+="3D: "+((stats.hit3D/stats.total)*100).toFixed(2)+"%\n";
+report+="2D: "+((stats.hit2D/stats.total)*100).toFixed(2)+"%\n";
+
+document.getElementById("output").innerText+=report;
+}
+
+function resetAccuracy(){
+localStorage.removeItem("accuracyStats");
+stats={total:0,hit4D:0,hit3D:0,hit2D:0};
+alert("Akurasi direset!");
+}
+
+</script>
+
+</body>
+</html>
